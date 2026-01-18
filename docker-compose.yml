@@ -1,0 +1,77 @@
+services:
+  ss14:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - SS14_VERSION=38cc74428e9250e9d537f02ad81c17e1f23bb579
+        - SS14_CDN=ss14cdn.zen-ben.com
+        - SS14_FORK=magesden
+    image: ghcr.io/wybrenkoelmans/ss14:latest
+    container_name: ss14
+    restart: unless-stopped
+    environment:
+      DOTNET_TieredPGO: "1"
+      DOTNET_TC_QuickJitForLoops: "1"
+      DOTNET_ReadyToRun: "0"
+    volumes:
+      - ./data:/server/data
+      - ./server_config.toml:/server/server_config.toml
+    ports:
+      - "9999:9999/udp"
+      - "44880:44880/tcp"  # Metrics port
+    networks:
+      - default
+      - proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.services.ss14.loadbalancer.server.port=9999"
+
+  ss14_cdn:
+    image: ghcr.io/space-wizards/robust.cdn:2
+    container_name: ss14_cdn
+    restart: unless-stopped
+    volumes:
+      - ./cdn/appsettings.json:/app/appsettings.json
+      - ./cdn/builds:/builds
+      - ./cdn/manifest:/manifest
+      - ./cdn/database:/database
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ss14_cdn.rule=Host(`ss14cdn.zen-ben.com`)"
+      - "traefik.http.services.ss14_cdn.loadbalancer.server.port=8080"
+    networks:
+      - default
+      - proxy
+
+  ss14_admin:
+    image: ghcr.io/space-wizards/ss14.admin:1
+    container_name: ss14_admin
+    user: 1654:1654
+    volumes:
+      - ./admin.yml:/app/appsettings.yml
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ss14_admin.rule=Host(`ss14a.zen-ben.com`)"
+      - "traefik.http.services.ss14_admin.loadbalancer.server.port=8080"
+    networks:
+      - default
+      - proxy
+
+  ss14_db:
+    image: postgres:18
+    container_name: ss14_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./database:/var/lib/postgresql
+    ports:
+      - "5432:5432"
+
+networks:
+  proxy:
+    external: true

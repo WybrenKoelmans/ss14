@@ -1,0 +1,6 @@
+cdn/
+data/
+database/
+.env
+admin.yml
+server_config.toml

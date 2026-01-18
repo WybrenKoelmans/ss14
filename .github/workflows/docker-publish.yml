@@ -1,0 +1,68 @@
+name: Build and Push SS14 Docker Image
+
+on:
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: wybrenkoelmans/ss14
+  SS14_CDN: ss14cdn.zen-ben.com
+  SS14_FORK: magesden
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Get latest version from manifest
+        id: get_version
+        run: |
+          python3 -c "
+          import json
+          import urllib.request
+          import os
+
+          url = 'https://${{ env.SS14_CDN }}/fork/${{ env.SS14_FORK }}/manifest'
+          print(f'Fetching manifest from {url}')
+          try:
+              with urllib.request.urlopen(url) as response:
+                  data = json.loads(response.read().decode())
+                  builds = data.get('builds', {})
+                  if not builds:
+                      raise Exception('No builds found in manifest')
+                  
+                  # Sort by time to find the latest
+                  # item[1] is the value dict, item[1]['time'] is the timestamp
+                  latest_version = max(builds.items(), key=lambda item: item[1]['time'])[0]
+                  print(f'Latest version found: {latest_version}')
+                  
+                  with open(os.environ['GITHUB_OUTPUT'], 'a') as fh:
+                      fh.write(f'ss14_version={latest_version}\n')
+          except Exception as e:
+              print(f'Error fetching/parsing manifest: {e}')
+              exit(1)
+          "
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          build-args: |
+            SS14_CDN=${{ env.SS14_CDN }}
+            SS14_FORK=${{ env.SS14_FORK }}
+            SS14_VERSION=${{ steps.get_version.outputs.ss14_version }}
