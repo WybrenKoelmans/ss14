@@ -2,7 +2,8 @@ name: Build and Push SS14 Docker Image
 
 on:
   workflow_dispatch:
-  workflow_call:
+  schedule:
+  - cron: "0 2 * * *"
 
 env:
   REGISTRY: ghcr.io
